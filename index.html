@@ -1,0 +1,1611 @@
+ <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EGEM-3D — Module Builder Prototype (with Boids)</title>
+  <style>
+#module-quick-actions button { margin-right:8px; padding:6px 8px; border-radius:6px; background:#333; color:#fff; border:none; cursor:pointer; }
+
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Arial}
+    #app{display:flex;height:100vh}
+    #sidebar{width:280px;background:#141414;color:#eee;padding:12px;box-sizing:border-box;overflow:auto}
+    .module{background:#222;padding:8px;margin-bottom:8px;border-radius:6px;cursor:grab}
+    #gameArea{flex:1;position:relative;background:#000}
+    canvas{display:block;width:100%;height:100%}
+    #hud{position:absolute;left:12px;top:12px;color:#fff;z-index:10}
+    #goalStatus{position:absolute;left:50%;transform:translateX(-50%);top:12px;color:#9cf;z-index:10}
+    #overlay{position:absolute;right:12px;top:12px;color:#fff;z-index:10}
+    #activeModules{margin-top:12px}
+    .active-module{background:#1c1c1c;padding:8px;margin-bottom:6px;border-radius:6px}
+    .active-module-header{display:flex;justify-content:space-between;align-items:center}
+    .toggle-btn{width:30px;height:28px;border-radius:6px;border:none;background:#333;color:#fff;cursor:pointer;font-weight:bold}
+    .submodules{display:none;margin-top:8px}
+/* --- Active section toggle & collapsed styling --- */
+.section-toggle {
+  background: transparent;
+  border: none;
+  color: #eee;
+  font-size: 16px;
+  margin-right: 6px;
+  cursor: pointer;
+  vertical-align: middle;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.active-section.collapsed .active-list { display: none; }
+.active-section h4 { display:flex; align-items:center; gap:6px; font-size:14px; margin:6px 0; color:#ddd; }
+.active-list { margin-top:6px; }
+
+    .active-module.expanded .submodules{display:block}
+    .submodules button{display:block;width:100%;margin-top:6px}
+    #resetBtn{background:#333;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer}
+    .theme{background:#2a2a2a;padding:6px;border-radius:6px;margin-bottom:6px;cursor:grab}
+    #crosshair{position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none;z-index:9}
+    #crosshair:after{content:'';position:absolute;left:50%;top:50%;width:2px;height:2px;margin:-1px 0 0 -1px;background:white;border-radius:50%}
+    .remove-small{background:#6b2222;border:none;color:#fff;padding:6px;border-radius:6px;cursor:pointer;margin-top:6px}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="sidebar">
+      <h3>Modules <button id="resetBtn">Reset</button></h3>
+      <div class="module" draggable="true" data-module="movement">🧍 Movement (WASD + Space)</div>
+      <div class="module" draggable="true" data-module="shooting">🔫 Shooting (LMB)</div>
+      <div class="module" draggable="true" data-module="enemyAI">👾 Enemy AI</div>
+      <div class="module" draggable="true" data-module="health">❤️ Health</div>
+      <div class="module" draggable="true" data-module="collision">⬛ Collision</div>
+      <div class="module" draggable="true" data-module="goal">🏁 Goal</div>
+      <div class="module" draggable="true" data-module="terrain">🧱 Terrain</div>
+<div class="module" draggable="true" data-module="spawnEnemies">⚔️ Spawn Enemy</div>
+<div class="module" draggable="true" data-module="spawnItems">📦 Spawn Items</div>
+
+
+
+
+
+      
+
+      <h4>Visual Themes</h4>
+      <div class="theme" draggable="true" data-theme="default">🖤 Default</div>
+      <div class="theme" draggable="true" data-theme="fantasy">🧙 Fantasy</div>
+      <div class="theme" draggable="true" data-theme="cyberpunk">🌆 Cyberpunk</div>
+
+<h4>Graphic FX</h4>
+<div class="module" draggable="true" data-module="boids">🐦 Boids (Flocking)</div>
+<div class="module" draggable="true" data-module="weather">⛅ Weather (Rain / Snow / Fog / Lightning)</div>
+<div class="module" draggable="true" data-module="dayNight">🌗 Day/Night Cycle</div>
+
+
+
+      <!-- Active modules sections (per category) -->
+<div id="active-modules-section" style="margin-top:12px;">
+  <h4>Active — Modules</h4>
+  <!-- Active modules sections (per category) -->
+<div id="active-modules-section" class="active-section" style="margin-top:12px;">
+  <h4>
+    <button class="section-toggle" data-target="active-modules-section" aria-expanded="true">▾</button>
+    Active — Modules <span id="active-modules-count">0</span>
+  </h4>
+  <div id="active-modules-list" class="active-list"></div>
+</div>
+
+<div id="active-graphicfx-section" class="active-section" style="margin-top:8px;">
+  <h4>
+    <button class="section-toggle" data-target="active-graphicfx-section" aria-expanded="true">▾</button>
+    Active — Graphic FX <span id="active-graphicfx-count">0</span>
+  </h4>
+  <div id="active-graphicfx-list" class="active-list"></div>
+</div>
+
+</div>
+
+<div id="active-graphicfx-section" style="margin-top:8px;">
+  <h4></h4>
+  <div id="active-graphicfx-list"></div>
+</div>
+
+    </div>
+
+    <div id="gameArea">
+      <canvas id="gameCanvas"></canvas>
+      <div id="hud">HP: <span id="hp">100</span> &nbsp; Score: <span id="score">0</span></div>
+      <div id="goalStatus"></div>
+      <div id="overlay"></div>
+      <div id="crosshair"></div>
+    </div>
+  </div>
+
+  <!-- Three.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+
+  <script>
+    // ---------- Core state ----------
+    const canvas = document.getElementById('gameCanvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth - 280, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, (window.innerWidth - 280) / window.innerHeight, 0.1, 1000);
+
+    const modules = {};
+    let currentTheme = 'default';
+
+    // Player state
+    const player = {
+  pos: new THREE.Vector3(0, 1.0, 0),
+  vel: new THREE.Vector3(),
+  speed: 5,
+  hp: 100,
+  onGround: true,
+  thirdPerson: false,
+  canJump: true,
+  jumpPower: 6, // default jump velocity (use slider to change)
+};
+
+
+
+    // Game collections
+const bullets = [];
+const enemies = [];
+const items = [];
+const terrainBlocks = [];
+const boids = [];
+
+// particles for bullet impacts
+const impactParticles = [];
+const impactParticleGeom = new THREE.SphereGeometry(0.06, 6, 6);
+
+
+    let goalActive = false;
+    let goalType = null;
+    let goalStatusText = '';
+    let goalStart = 0;
+    let goalDuration = 15000;
+    let score = 0;
+
+    // DOM
+    const hpSpan = document.getElementById('hp');
+    const scoreSpan = document.getElementById('score');
+    const goalStatusDiv = document.getElementById('goalStatus');
+    const overlay = document.getElementById('overlay');
+
+    // Three.js basics
+    scene.background = new THREE.Color(0x111111);
+    const dir = new THREE.DirectionalLight(0xffffff, 1);
+    dir.position.set(5, 10, 2);
+    scene.add(dir, new THREE.AmbientLight(0x404040));
+// --- Day/Night cycle setup (sky, sun, moon, stars) ---
+let dayNightActive = false;
+let cycleTime = 0; // seconds
+let cycleDuration = 300; // 5 minutes total (300 seconds)
+
+let sunLight, moonLight, sunMesh, moonMesh, stars;
+// Weather system state
+const weatherState = {
+  rain: false,
+  snow: false,
+  fog: false,
+  lightning: false,
+  rainParticles: [],
+  snowParticles: [],
+  lightningCooldown: 0
+};
+let lightningLight = null;
+
+const twinkleStars = [];
+let milkyWayMesh;
+
+
+// Create sky dome
+const skyGeo = new THREE.SphereGeometry(500, 32, 15);
+const skyMat = new THREE.MeshBasicMaterial({ color: 0x87ceeb, side: THREE.BackSide });
+const skyDome = new THREE.Mesh(skyGeo, skyMat);
+scene.add(skyDome);
+
+// Sun
+const sunGeo = new THREE.SphereGeometry(5, 16, 16);
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xffee88 });
+sunMesh = new THREE.Mesh(sunGeo, sunMat);
+scene.add(sunMesh);
+
+// Sun light
+sunLight = new THREE.DirectionalLight(0xffffff, 1);
+scene.add(sunLight);
+
+// Moon
+const moonGeo = new THREE.SphereGeometry(3, 16, 16);
+const moonMat = new THREE.MeshBasicMaterial({ color: 0xcccccc });
+moonMesh = new THREE.Mesh(moonGeo, moonMat);
+scene.add(moonMesh);
+// start invisible until the cycle is turned on
+if (sunMesh) sunMesh.visible = false;
+if (moonMesh) moonMesh.visible = false;
+if (sunLight) sunLight.visible = false;
+if (moonLight) moonLight.visible = false;
+if (typeof stars !== 'undefined') stars.visible = false;
+
+
+// Moon light
+moonLight = new THREE.DirectionalLight(0x9999ff, 0.5);
+scene.add(moonLight);
+
+// Stars
+const starGeo = new THREE.BufferGeometry();
+const starCount = 500;
+const starPositions = [];
+for (let i = 0; i < starCount; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.random() * Math.PI;
+  const radius = 490;
+  starPositions.push(
+    Math.sin(phi) * Math.cos(theta) * radius,
+    Math.sin(phi) * Math.sin(theta) * radius,
+    Math.cos(phi) * radius
+  );
+}
+starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1 });
+stars = new THREE.Points(starGeo, starMat);
+stars.visible = false; // hide until night
+scene.add(stars);
+// initialize sun & moon positions (so sun isn't stuck at origin)
+(function initDayNightPositions(){
+  const angle = (cycleTime / cycleDuration) * Math.PI * 2;
+  const radius = 200;
+  if (sunMesh) sunMesh.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+  if (moonMesh) moonMesh.position.set(Math.cos(angle + Math.PI) * radius, Math.sin(angle + Math.PI) * radius, 0);
+  if (sunLight && sunMesh) sunLight.position.copy(sunMesh.position).normalize();
+  if (moonLight && moonMesh) moonLight.position.copy(moonMesh.position).normalize();
+  const sunUp = Math.sin(angle) > 0;
+  if (sunLight) sunLight.intensity = sunUp ? 1.0 : 0.0;
+  if (moonLight) moonLight.intensity = sunUp ? 0.0 : 0.5;
+  if (typeof stars !== 'undefined') stars.visible = !sunUp;
+  if (moonMesh && moonMesh.material && !sunUp) moonMesh.material.color.set(0xccccff);
+})();
+
+// --- Twinkle stars + Milky Way band setup ---
+(function createTwinklesAndMilkyWay(){
+  // Twinkle stars (individual small meshes so each can twinkle separately)
+  for (let i = 0; i < 120; i++) {
+    const g = new THREE.SphereGeometry(0.06, 6, 6);
+    const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false });
+    const mesh = new THREE.Mesh(g, m);
+    // place on sky sphere
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1); // distribute over sphere
+    const r = 480 + Math.random() * 8;
+    const x = Math.sin(phi) * Math.cos(theta) * r;
+    const y = Math.cos(phi) * r;
+    const z = Math.sin(phi) * Math.sin(theta) * r;
+    mesh.position.set(x, y, z);
+    mesh.lookAt(0,0,0); // roughly face center
+    scene.add(mesh);
+    twinkleStars.push({
+      mesh,
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.8 + Math.random() * 1.6,
+      baseOpacity: m.opacity
+    });
+  }
+
+  // Milky Way: procedural canvas texture (soft band with speckles)
+  const cw = 1024, ch = 256;
+  const cvs = document.createElement('canvas');
+  cvs.width = cw; cvs.height = ch;
+  const ctx = cvs.getContext('2d');
+
+  // clear
+  ctx.fillStyle = 'rgba(0,0,0,0)';
+  ctx.fillRect(0,0,cw,ch);
+
+  // horizontal soft band gradient (center brighter)
+  const g = ctx.createLinearGradient(0,0,cw,0);
+  g.addColorStop(0.0, 'rgba(255,255,255,0.00)');
+  g.addColorStop(0.38, 'rgba(255,255,255,0.04)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.14)');
+  g.addColorStop(0.62, 'rgba(255,255,255,0.04)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0.00)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, ch * 0.15, cw, ch * 0.7);
+
+  // add speckle noise for stars inside band
+  for (let i = 0; i < 3500; i++) {
+    const x = Math.random() * cw;
+    // bias Y toward center band
+    const y = (ch/2) + (Math.random() - 0.5) * (ch * 0.25) * (Math.random() + 0.5);
+    const a = Math.random() * 0.9;
+    ctx.fillStyle = `rgba(255,255,255,${a})`;
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  const mwTex = new THREE.CanvasTexture(cvs);
+  mwTex.needsUpdate = true;
+  const mwMat = new THREE.MeshBasicMaterial({ map: mwTex, transparent: true, opacity: 0.0, depthWrite: false });
+  milkyWayMesh = new THREE.Mesh(new THREE.PlaneGeometry(900, 140), mwMat);
+
+  // place it far up in the sky and tilt slightly; it will look like a band across the sky
+  milkyWayMesh.position.set(0, 120, -300);
+  milkyWayMesh.rotation.set(Math.PI * 0.12, 0, 0);
+  milkyWayMesh.renderOrder = 1000;
+  scene.add(milkyWayMesh);
+})();// Weather helpers: rain / snow / fog / lightning (simple implementations)
+function spawnRain(count = 300) {
+  const mat = new THREE.LineBasicMaterial({ color: 0x88aaff, transparent: true, opacity: 0.7 });
+  for (let i = 0; i < count; i++) {
+    const geo = new THREE.BufferGeometry();
+    const x = (Math.random() - 0.5) * 200;
+    const z = (Math.random() - 0.5) * 200;
+    const y = 40 + Math.random() * 60;
+    const positions = new Float32Array([x, y, z, x, y - 1.2 - Math.random()*2, z]);
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const line = new THREE.Line(geo, mat);
+    line.userData = { velY: 20 + Math.random() * 40 };
+    scene.add(line);
+    weatherState.rainParticles.push(line);
+  }
+}
+
+function spawnSnow(count = 150) {
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+  const geo = new THREE.SphereGeometry(0.06, 6, 6);
+  for (let i = 0; i < count; i++) {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set((Math.random()-0.5)*200, 30 + Math.random()*50, (Math.random()-0.5)*200);
+    mesh.userData = { velY: -2 - Math.random()*2, sway: Math.random()*0.5 };
+    scene.add(mesh);
+    weatherState.snowParticles.push(mesh);
+  }
+}
+
+function enableFog(on) {
+  if (on) scene.fog = new THREE.FogExp2(0x0b0b14, 0.0025);
+  else scene.fog = null;
+}
+
+function triggerLightning() {
+  if (weatherState.lightningCooldown > 0) return;
+  weatherState.lightningCooldown = 3 + Math.random()*6;
+  if (!lightningLight) {
+    lightningLight = new THREE.PointLight(0xffffff, 0, 1200);
+    scene.add(lightningLight);
+  }
+  lightningLight.intensity = 8.0;
+  lightningLight.position.set((Math.random()-0.5)*80, 60 + Math.random()*20, (Math.random()-0.5)*80);
+  // brief stun to player
+  player.stunned = 1.2;
+}
+
+function updateWeather(dt) {
+  // rain update
+  if (weatherState.rain) {
+    for (let i = weatherState.rainParticles.length - 1; i >= 0; i--) {
+      const r = weatherState.rainParticles[i];
+      const pos = r.geometry.attributes.position.array;
+      for (let k = 1; k < pos.length; k += 3) pos[k] -= r.userData.velY * dt;
+      r.geometry.attributes.position.needsUpdate = true;
+      if (pos[1] < -10) {
+        const x = (Math.random() - 0.5) * 200; const z = (Math.random() - 0.5) * 200; const y = 40 + Math.random() * 60;
+        pos[0] = x; pos[1] = y; pos[2] = z; pos[3] = x; pos[4] = y - 1.2 - Math.random()*2; pos[5] = z;
+      }
+    }
+  }
+
+  // snow update
+  if (weatherState.snow) {
+    for (let i = weatherState.snowParticles.length - 1; i >= 0; i--) {
+      const s = weatherState.snowParticles[i];
+      s.position.y += s.userData.velY * dt;
+      s.position.x += Math.sin(performance.now()*0.001 * s.userData.sway) * dt * 0.6;
+      if (s.position.y < -5) s.position.set((Math.random()-0.5)*200, 30 + Math.random()*50, (Math.random()-0.5)*200);
+    }
+  }
+
+  // lightning cooldown & occasional trigger
+  if (weatherState.lightning) {
+    weatherState.lightningCooldown = Math.max(0, weatherState.lightningCooldown - dt);
+    if (Math.random() < 0.002 && weatherState.lightningCooldown <= 0) triggerLightning();
+  } else {
+    weatherState.lightningCooldown = Math.max(0, weatherState.lightningCooldown - dt);
+  }
+
+  // lightning fade
+  if (lightningLight) {
+    lightningLight.intensity = Math.max(0, lightningLight.intensity - dt * 6.0);
+    if (lightningLight.intensity <= 0.01) { scene.remove(lightningLight); lightningLight = null; }
+  }
+}
+
+
+
+
+// --- end Day/Night setup ---
+const themeTint = new THREE.Color(1,1,1);
+
+
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+    ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+    // Player mesh (invisible in FP, visible in 3P)
+    const playerMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.6, 0.6), new THREE.MeshStandardMaterial({ color: 0x2288ff }));
+    playerMesh.position.copy(player.pos).y += 0.8; scene.add(playerMesh);
+
+    // Crosshair visibility
+    const crosshair = document.getElementById('crosshair');
+
+    // Simple theme switcher
+    function applyTheme(theme) {
+  currentTheme = theme;
+
+  // choose a tint for theme blending (values are r,g,b multipliers)
+  if (theme === 'cyberpunk') {
+    themeTint.setRGB(0.5, 0.18, 0.8); // a purple-ish tint
+  } else if (theme === 'fantasy') {
+    themeTint.setRGB(1.0, 0.85, 0.7); // warm fantasy tint
+  } else {
+    themeTint.setRGB(1,1,1); // default (no tint)
+  }
+
+  // If the day/night cycle isn't active, directly set the sky material + background to the theme base
+  if (typeof skyMat !== 'undefined' && skyMat && !dayNightActive) {
+    let baseHex = 0x111111;
+    if (theme === 'cyberpunk') baseHex = 0x0b0b1a;
+    else if (theme === 'fantasy') baseHex = 0x2b1b1b;
+    // apply base and then tint
+    skyMat.color.set(baseHex);
+    skyMat.color.multiply(themeTint);
+    scene.background.set(skyMat.color.getHex());
+  } else {
+    // when day/night is active we don't override the sky dome color here
+    // but still set a neutral scene.background fallback so e.g. reflection probes use something sensible
+    const bg = (theme === 'cyberpunk') ? 0x0b0b1a : (theme === 'fantasy' ? 0x2b1b1b : 0x111111);
+    scene.background.set(bg);
+  }
+}
+
+
+    // ---------- Drag & drop for modules/themes ----------
+    document.querySelectorAll('.module, .theme').forEach(el => {
+      el.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('module', e.target.dataset.module || '');
+        e.dataTransfer.setData('theme', e.target.dataset.theme || '');
+      });
+    });
+
+    const gameArea = document.getElementById('gameArea');
+    gameArea.addEventListener('dragover', e => e.preventDefault());
+    gameArea.addEventListener('drop', e => {
+      e.preventDefault();
+      const mod = e.dataTransfer.getData('module');
+      const theme = e.dataTransfer.getData('theme');
+      if (mod) enableModule(mod);
+      if (theme) applyTheme(theme);
+    });
+
+    // ---------- Module manager & UI (updated for collapsible submodules) ----------
+    // mapping of module id -> category (used to place active UI under the right section)
+const moduleCategoryMap = {
+  movement: 'modules',
+  shooting: 'modules',
+  enemyAI: 'modules',
+  health: 'modules',
+  collision: 'modules',
+  goal: 'modules',
+  terrain: 'modules',
+  spawnEnemies: 'modules',
+  spawnItems: 'modules',
+    boids: 'graphicfx',
+  dayNight: 'graphicfx',
+  weather: 'graphicfx'
+};
+
+
+
+// update the active counts in headers
+function updateActiveCounts() {
+  const modulesCount = document.getElementById('active-modules-list').children.length;
+  const gfxCount = document.getElementById('active-graphicfx-list').children.length;
+  const modulesSpan = document.getElementById('active-modules-count');
+  const gfxSpan = document.getElementById('active-graphicfx-count');
+  if (modulesSpan) modulesSpan.textContent = modulesCount;
+  if (gfxSpan) gfxSpan.textContent = gfxCount;
+}
+
+// wire up the header toggle buttons (collapse/expand)
+function initSectionToggles() {
+  document.querySelectorAll('.section-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const section = document.getElementById(targetId);
+      if (!section) return;
+      const isCollapsed = section.classList.toggle('collapsed');
+      btn.textContent = isCollapsed ? '▸' : '▾';
+      btn.setAttribute('aria-expanded', !isCollapsed);
+    });
+  });
+}
+
+
+function getActiveContainerFor(mod) {
+  const cat = moduleCategoryMap[mod] || 'modules';
+  if (cat === 'graphicfx') return document.getElementById('active-graphicfx-list');
+  return document.getElementById('active-modules-list');
+}
+
+
+    function addActiveUI(mod) {
+      if (document.getElementById('active-' + mod)) return;
+
+      const el = document.createElement('div'); el.className = 'active-module'; el.id = 'active-' + mod;
+
+      // header with module name and collapse toggle (+)
+      const header = document.createElement('div'); header.className = 'active-module-header';
+      const title = document.createElement('div'); title.textContent = mod;
+      const toggle = document.createElement('button'); toggle.className = 'toggle-btn'; toggle.textContent = '+';
+
+      header.appendChild(title);
+      header.appendChild(toggle);
+      el.appendChild(header);
+
+      // submodule container (hidden by default)
+      const sub = document.createElement('div'); sub.className = 'submodules'; sub.id = 'sub-' + mod;
+
+      // add remove button inside submodules (so header stays a tidy "+")
+      const removeBtn = document.createElement('button'); removeBtn.className = 'remove-small'; removeBtn.textContent = 'Remove Module';
+      removeBtn.onclick = () => disableModule(mod);
+      sub.appendChild(removeBtn);
+
+      // goal config: show options (move into submodules)
+      if (mod === 'goal') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+        const goals = [ ['defeatAll','Defeat All Enemies'], ['surviveTime','Survive Time'], ['collectItems','Collect Items'], ['reachDestination','Reach Destination'] ];
+        goals.forEach(g => { const b = document.createElement('button'); b.textContent = g[1]; b.style.display='block'; b.style.width='100%'; b.style.marginTop='6px'; b.onclick = ()=> selectGoal(g[0]); cfg.appendChild(b); });
+        sub.appendChild(cfg);
+      }
+
+      // boids controls
+      if (mod === 'boids') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+        const spawnBtn = document.createElement('button'); spawnBtn.textContent = 'Spawn 12 Boids'; spawnBtn.style.display='block'; spawnBtn.style.width='100%'; spawnBtn.style.marginTop='6px'; spawnBtn.onclick = ()=> spawnBoids(12);
+        cfg.appendChild(spawnBtn);
+        const clearBtn = document.createElement('button'); clearBtn.textContent = 'Clear Boids'; clearBtn.style.display='block'; clearBtn.style.width='100%'; clearBtn.style.marginTop='6px'; clearBtn.onclick = ()=> disableModule('boids');
+        cfg.appendChild(clearBtn);
+        sub.appendChild(cfg);
+      }
+
+                  // day/night cycle controls (with speed slider & presets)
+      if (mod === 'dayNight') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+
+        // start/stop button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.style.display = 'block';
+        toggleBtn.style.width = '100%';
+        toggleBtn.style.marginTop = '6px';
+        toggleBtn.textContent = dayNightActive ? 'Stop Day/Night Cycle' : 'Start Day/Night Cycle';
+        toggleBtn.onclick = () => {
+          dayNightActive = !dayNightActive;
+          toggleBtn.textContent = dayNightActive ? 'Stop Day/Night Cycle' : 'Start Day/Night Cycle';
+
+          // show/hide sun & moon + lights & stars
+          if (typeof sunMesh !== 'undefined' && sunMesh) sunMesh.visible = !!dayNightActive;
+          if (typeof moonMesh !== 'undefined' && moonMesh) moonMesh.visible = !!dayNightActive;
+          if (typeof sunLight !== 'undefined' && sunLight) sunLight.visible = !!dayNightActive;
+          if (typeof moonLight !== 'undefined' && moonLight) moonLight.visible = !!dayNightActive;
+
+          if (dayNightActive) {
+            // set initial intensities based on current cycle position
+            const angle = (cycleTime / cycleDuration) * Math.PI * 2;
+            const sunUp = Math.sin(angle) > 0;
+            if (sunLight) sunLight.intensity = sunUp ? 1.0 : 0.0;
+            if (moonLight) moonLight.intensity = sunUp ? 0.0 : 0.5;
+            if (typeof stars !== 'undefined' && stars) stars.visible = !sunUp;
+          } else {
+            // definitely hide lights and stars while off
+            if (sunLight) sunLight.intensity = 0.0;
+            if (moonLight) moonLight.intensity = 0.0;
+            if (typeof stars !== 'undefined' && stars) stars.visible = false;
+          }
+        };
+        cfg.appendChild(toggleBtn);
+
+        // slider label (shows minutes/seconds)
+        const sliderLabel = document.createElement('div');
+        sliderLabel.style.fontSize = '12px';
+        sliderLabel.style.marginTop = '8px';
+        sliderLabel.textContent = (cycleDuration >= 60) ? `Cycle length: ${(cycleDuration/60).toFixed(1)} min` : `Cycle length: ${cycleDuration} s`;
+        cfg.appendChild(sliderLabel);
+
+        // slider
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = 30;    // 30 seconds minimum
+        slider.max = 900;   // 900 seconds = 15 minutes
+        slider.step = 10;
+        slider.value = cycleDuration;
+        slider.style.width = '100%';
+        slider.oninput = () => {
+          cycleDuration = Number(slider.value);
+          if (cycleDuration >= 60) sliderLabel.textContent = `Cycle length: ${(cycleDuration/60).toFixed(1)} min`;
+          else sliderLabel.textContent = `Cycle length: ${cycleDuration} s`;
+        };
+        cfg.appendChild(slider);
+
+        // quick preset buttons (2min / 5min / 10min)
+        const presets = document.createElement('div');
+        presets.style.display = 'flex';
+        presets.style.gap = '6px';
+        presets.style.marginTop = '8px';
+
+        const makePreset = (sec, text) => {
+          const b = document.createElement('button');
+          b.textContent = text;
+          b.style.flex = '1';
+          b.onclick = () => {
+            slider.value = sec;
+            slider.oninput();
+          };
+          return b;
+        };
+        presets.appendChild(makePreset(120, '2 min'));
+        presets.appendChild(makePreset(300, '5 min'));
+        presets.appendChild(makePreset(600, '10 min'));
+        cfg.appendChild(presets);
+
+        // small help text
+        const help = document.createElement('div');
+        help.style.fontSize = '11px';
+        help.style.opacity = '0.8';
+        help.style.marginTop = '6px';
+        help.textContent = 'Drag to change full day length. Lower = faster cycle.';
+        cfg.appendChild(help);
+
+        sub.appendChild(cfg);
+      } // end dayNight UI block
+
+      if (mod === 'weather') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+
+        const makeToggle = (key, label) => {
+          const b = document.createElement('button');
+          b.style.display = 'block'; b.style.width = '100%'; b.style.marginTop = '6px';
+          b.textContent = weatherState[key] ? `Disable ${label}` : `Enable ${label}`;
+          b.onclick = () => {
+            weatherState[key] = !weatherState[key];
+            b.textContent = weatherState[key] ? `Disable ${label}` : `Enable ${label}`;
+            if (key === 'rain') {
+              if (weatherState[key]) spawnRain(300); else { weatherState.rainParticles.forEach(p => scene.remove(p)); weatherState.rainParticles.length = 0; }
+            }
+            if (key === 'snow') {
+              if (weatherState[key]) spawnSnow(120); else { weatherState.snowParticles.forEach(p => scene.remove(p)); weatherState.snowParticles.length = 0; }
+            }
+            if (key === 'fog') enableFog(weatherState[key]);
+          };
+          return b;
+        };
+
+        cfg.appendChild(makeToggle('rain', 'Rain'));
+        cfg.appendChild(makeToggle('snow', 'Snow'));
+        cfg.appendChild(makeToggle('fog', 'Fog'));
+
+        const lightningToggle = document.createElement('button');
+        lightningToggle.style.display = 'block'; lightningToggle.style.width = '100%'; lightningToggle.style.marginTop = '6px';
+        lightningToggle.textContent = weatherState.lightning ? 'Disable Lightning' : 'Enable Lightning';
+        lightningToggle.onclick = () => { weatherState.lightning = !weatherState.lightning; lightningToggle.textContent = weatherState.lightning ? 'Disable Lightning' : 'Enable Lightning'; };
+        cfg.appendChild(lightningToggle);
+
+        const strikeBtn = document.createElement('button');
+        strikeBtn.style.display = 'block'; strikeBtn.style.width = '100%'; strikeBtn.style.marginTop = '6px';
+        strikeBtn.textContent = 'Trigger Lightning Now (stuns)';
+        strikeBtn.onclick = () => { triggerLightning(); };
+        cfg.appendChild(strikeBtn);
+
+        const help = document.createElement('div');
+        help.style.fontSize = '11px'; help.style.opacity = '0.85'; help.style.marginTop = '6px';
+        help.textContent = 'Lightning stuns player briefly.';
+        cfg.appendChild(help);
+
+        sub.appendChild(cfg);
+      }
+
+      
+
+
+
+
+      // shooting module controls: impact particles on/off
+      if (mod === 'shooting') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+
+        // toggle for impact particles
+        const particleToggle = document.createElement('button');
+        particleToggle.style.display = 'block';
+        particleToggle.style.width = '100%';
+        particleToggle.style.marginTop = '6px';
+        // default: enabled (you can change to false if you want off by default)
+        if (typeof modules._shootingParticles === 'undefined') modules._shootingParticles = true;
+        particleToggle.textContent = modules._shootingParticles ? 'Disable Impact Particles' : 'Enable Impact Particles';
+        particleToggle.onclick = () => {
+          modules._shootingParticles = !modules._shootingParticles;
+          particleToggle.textContent = modules._shootingParticles ? 'Disable Impact Particles' : 'Enable Impact Particles';
+        };
+        cfg.appendChild(particleToggle);
+
+        sub.appendChild(cfg);
+      }
+
+
+            // movement controls: jumping toggle + jump power slider
+      if (mod === 'movement') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+
+        // enable/disable jumping
+        const jumpBtn = document.createElement('button');
+        jumpBtn.style.display = 'block';
+        jumpBtn.style.width = '100%';
+        jumpBtn.style.marginTop = '6px';
+        jumpBtn.textContent = player.canJump ? 'Disable Jumping' : 'Enable Jumping';
+        jumpBtn.onclick = () => {
+          player.canJump = !player.canJump;
+          jumpBtn.textContent = player.canJump ? 'Disable Jumping' : 'Enable Jumping';
+        };
+        cfg.appendChild(jumpBtn);
+
+        // label showing current jump power
+        const jumpInfo = document.createElement('div');
+        jumpInfo.style.marginTop = '8px';
+        jumpInfo.style.fontSize = '12px';
+        jumpInfo.style.opacity = '0.95';
+        jumpInfo.textContent = `Jump power: ${player.jumpPower}`;
+        cfg.appendChild(jumpInfo);
+
+        // slider for jump power
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = 2;
+        slider.max = 30;
+        slider.step = 1;
+        slider.value = player.jumpPower;
+        slider.style.width = '100%';
+        slider.style.marginTop = '6px';
+        slider.oninput = () => {
+          player.jumpPower = Number(slider.value);
+          jumpInfo.textContent = `Jump power: ${player.jumpPower}`;
+        };
+        cfg.appendChild(slider);
+
+        // preset buttons (small, medium, huge)
+        const presets = document.createElement('div');
+        presets.style.display = 'flex';
+        presets.style.gap = '6px';
+        presets.style.marginTop = '8px';
+
+        const makePreset = (val, text) => {
+          const b = document.createElement('button');
+          b.textContent = text;
+          b.style.flex = '1';
+          b.onclick = () => {
+            slider.value = val;
+            slider.oninput();
+          };
+          return b;
+        };
+        presets.appendChild(makePreset(6, 'Default'));
+        presets.appendChild(makePreset(12, 'High'));
+        presets.appendChild(makePreset(20, 'Super Jump'));
+        cfg.appendChild(presets);
+
+        // tiny help
+        const help = document.createElement('div');
+        help.style.fontSize = '11px';
+        help.style.opacity = '0.8';
+        help.style.marginTop = '6px';
+        help.textContent = 'Adjust jump velocity — higher = higher jumps.';
+        cfg.appendChild(help);
+
+        sub.appendChild(cfg);
+      }
+
+
+      // terrain controls: regenerate / clear
+      if (mod === 'terrain') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+
+        const genBtn = document.createElement('button');
+        genBtn.textContent = 'Generate Terrain';
+        genBtn.style.display='block'; genBtn.style.width='100%'; genBtn.style.marginTop='6px';
+        genBtn.onclick = () => {
+          // clear existing terrain then create new sample terrain
+          terrainBlocks.forEach(b => scene.remove(b.mesh));
+          terrainBlocks.length = 0;
+          createSampleTerrain();
+          updateHUD();
+        };
+        cfg.appendChild(genBtn);
+
+        const clearBtnT = document.createElement('button');
+        clearBtnT.textContent = 'Clear Terrain';
+        clearBtnT.style.display='block'; clearBtnT.style.width='100%'; clearBtnT.style.marginTop='6px';
+        clearBtnT.onclick = () => {
+          terrainBlocks.forEach(b => scene.remove(b.mesh));
+          terrainBlocks.length = 0;
+          updateHUD();
+        };
+        cfg.appendChild(clearBtnT);
+
+        // optional: regenerate with N pieces (simple prompt)
+        const regenSmall = document.createElement('button');
+        regenSmall.textContent = 'Generate Small (3)';
+        regenSmall.style.display='block'; regenSmall.style.width='100%'; regenSmall.style.marginTop='6px';
+        regenSmall.onclick = () => {
+          terrainBlocks.forEach(b => scene.remove(b.mesh));
+          terrainBlocks.length = 0;
+          // small generation: call createSampleTerrain but with limited count by temporarily overriding it
+          (function smallGen(){
+            const mat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+            for (let i=0;i<3;i++) {
+              const w = 2 + Math.random()*6; const d = 2 + Math.random()*6; const h = 0.5 + Math.random()*2;
+              const x = (Math.random()-0.5)*60; const z = (Math.random()-0.5)*60; const y = h/2;
+              const geo = new THREE.BoxGeometry(w,d,h);
+              const mesh = new THREE.Mesh(geo, mat);
+              mesh.position.set(x, y, z);
+              scene.add(mesh);
+              terrainBlocks.push({ mesh, w, d, h, hp:5 });
+            }
+          })();
+          updateHUD();
+        };
+        cfg.appendChild(regenSmall);
+
+        sub.appendChild(cfg);
+      }
+
+
+      // spawn enemies controls (appears inside expanded "Spawn Enemy" module)
+      if (mod === 'spawnEnemies') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+        const spawn1 = document.createElement('button');
+        spawn1.textContent = 'Spawn 1 Enemy';
+        spawn1.style.display='block'; spawn1.style.width='100%'; spawn1.style.marginTop='6px';
+        spawn1.onclick = () => spawnEnemiesUI(1);
+        cfg.appendChild(spawn1);
+
+        const spawn4 = document.createElement('button');
+        spawn4.textContent = 'Spawn 4 Enemies';
+        spawn4.style.display='block'; spawn4.style.width='100%'; spawn4.style.marginTop='6px';
+        spawn4.onclick = () => spawnEnemiesUI(4);
+        cfg.appendChild(spawn4);
+
+        const clearE = document.createElement('button');
+        clearE.textContent = 'Clear Enemies';
+        clearE.style.display='block'; clearE.style.width='100%'; clearE.style.marginTop='6px';
+        clearE.onclick = () => { enemies.forEach(e => scene.remove(e.mesh)); enemies.length = 0; };
+        cfg.appendChild(clearE);
+
+        sub.appendChild(cfg);
+      }
+
+      // spawn items controls (appears inside expanded "Spawn Items" module)
+      if (mod === 'spawnItems') {
+        const cfg = document.createElement('div'); cfg.style.marginTop = '8px';
+        const spawnI = document.createElement('button');
+        spawnI.textContent = 'Spawn 3 Items';
+        spawnI.style.display='block'; spawnI.style.width='100%'; spawnI.style.marginTop='6px';
+        spawnI.onclick = () => spawnItemsUI(3);
+        cfg.appendChild(spawnI);
+
+        const clearI = document.createElement('button');
+        clearI.textContent = 'Clear Items';
+        clearI.style.display='block'; clearI.style.width='100%'; clearI.style.marginTop='6px';
+        clearI.onclick = () => { items.forEach(i => scene.remove(i.mesh)); items.length = 0; };
+        cfg.appendChild(clearI);
+
+        sub.appendChild(cfg);
+      }
+
+
+      el.appendChild(sub);
+      const container = getActiveContainerFor(mod);
+container.appendChild(el);
+updateActiveCounts();
+
+
+
+      // toggle behaviour
+      toggle.addEventListener('click', () => {
+        const isExpanded = el.classList.toggle('expanded');
+        toggle.textContent = isExpanded ? '−' : '+';
+      });
+    }
+
+    function enableModule(mod) {
+  if (modules[mod]) return; modules[mod] = true; addActiveUI(mod);
+  if (mod === 'terrain') createSampleTerrain();
+  if (mod === 'enemyAI') spawnEnemies(4);
+  if (mod === 'health') player.hp = 100;
+  if (mod === 'boids') spawnBoids(12);
+  if (mod === 'movement') player.canJump = true; // ensure movement enables jumping by default
+  updateHUD();
+  alert('✅ ' + mod + ' enabled');
+}
+
+
+    function disableModule(mod) {
+  delete modules[mod];
+  const el = document.getElementById('active-' + mod);
+  if (el) el.remove();
+  updateActiveCounts();
+
+  if (mod === 'terrain') {
+    terrainBlocks.forEach(b => scene.remove(b.mesh));
+    terrainBlocks.length = 0;
+  }
+  if (mod === 'enemyAI') {
+    enemies.forEach(e => { if (e.mesh) scene.remove(e.mesh); });
+    enemies.length = 0;
+  }
+  if (mod === 'boids') {
+    boids.forEach(b => { if (b.mesh) scene.remove(b.mesh); });
+    boids.length = 0;
+  }
+
+  // if disabling day/night, stop the cycle and hide its visuals
+  if (mod === 'dayNight') {
+    dayNightActive = false;
+    cycleTime = 0;
+    if (typeof sunMesh !== 'undefined' && sunMesh) sunMesh.visible = false;
+    if (typeof moonMesh !== 'undefined' && moonMesh) moonMesh.visible = false;
+    if (typeof sunLight !== 'undefined' && sunLight) { sunLight.visible = false; sunLight.intensity = 0; }
+    if (typeof moonLight !== 'undefined' && moonLight) { moonLight.visible = false; moonLight.intensity = 0; }
+    if (typeof stars !== 'undefined' && stars) stars.visible = false;
+    if (typeof milkyWayMesh !== 'undefined' && milkyWayMesh && milkyWayMesh.material) { milkyWayMesh.material.opacity = 0; milkyWayMesh.visible = false; }
+    if (typeof twinkleStars !== 'undefined' && twinkleStars.length) twinkleStars.forEach(ts => { if (ts.mesh) ts.mesh.visible = false; });
+  }
+
+  updateHUD();
+  alert('🗑️ ' + mod + ' removed');
+}
+
+
+    
+      function resetAll() {
+  // clear modules mapping and UI (don't remove day/night objects — only hide/reset them)
+  Object.keys(modules).forEach(k => delete modules[k]);
+
+  // remove and clear bullets/enemies/items/terrain/boids
+  bullets.forEach(b => { if (b.mesh) scene.remove(b.mesh); });
+  bullets.length = 0;
+
+  enemies.forEach(e => { if (e.mesh) scene.remove(e.mesh); });
+  enemies.length = 0;
+
+  items.forEach(i => { if (i.mesh) scene.remove(i.mesh); });
+  items.length = 0;
+
+  terrainBlocks.forEach(t => { if (t.mesh) scene.remove(t.mesh); });
+  terrainBlocks.length = 0;
+
+  boids.forEach(b => { if (b.mesh) scene.remove(b.mesh); });
+  boids.length = 0;
+
+  // remove impact particles
+  if (typeof impactParticles !== 'undefined') {
+    impactParticles.forEach(p => { if (p.mesh) scene.remove(p.mesh); });
+    impactParticles.length = 0;
+  }
+
+  // remove any twinkle star meshes created earlier, but keep arrays so the system can recreate them later
+  if (typeof twinkleStars !== 'undefined' && twinkleStars.length) {
+    twinkleStars.forEach(ts => { if (ts.mesh) scene.remove(ts.mesh); });
+    // keep twinkleStars array (clear contents so create code can rebuild later if needed)
+    twinkleStars.length = 0;
+  }
+
+  // do not destroy milkyWayMesh object — just hide it and reset opacity
+  if (typeof milkyWayMesh !== 'undefined' && milkyWayMesh) {
+    if (milkyWayMesh.material) milkyWayMesh.material.opacity = 0;
+    milkyWayMesh.visible = false;
+  }
+
+  // STOP day-night but keep objects so logic is stable
+  dayNightActive = false;
+  cycleTime = 0;
+
+  if (typeof sunMesh !== 'undefined' && sunMesh) {
+    sunMesh.visible = false;
+    // reset to starting position (optional)
+    const angle = (cycleTime / cycleDuration) * Math.PI * 2;
+    const radius = 200;
+    sunMesh.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+  }
+  if (typeof moonMesh !== 'undefined' && moonMesh) {
+    moonMesh.visible = false;
+    const angle = (cycleTime / cycleDuration) * Math.PI * 2;
+    const radius = 200;
+    moonMesh.position.set(Math.cos(angle + Math.PI) * radius, Math.sin(angle + Math.PI) * radius, 0);
+  }
+  if (typeof sunLight !== 'undefined' && sunLight) {
+    sunLight.visible = false;
+    sunLight.intensity = 0;
+  }
+  if (typeof moonLight !== 'undefined' && moonLight) {
+    moonLight.visible = false;
+    moonLight.intensity = 0;
+  }
+  if (typeof stars !== 'undefined' && stars) {
+    stars.visible = false;
+  }
+
+  // remove destination if any
+  if (typeof destinationMesh !== 'undefined' && destinationMesh) {
+    scene.remove(destinationMesh);
+    destinationMesh = null;
+  }
+
+  // tidy active module UI list
+  document.querySelectorAll('#active-modules-list .active-module, #active-graphicfx-list .active-module').forEach(n => n.remove());
+  updateActiveCounts();
+
+  // reset player / HUD / goal
+  player.hp = 100;
+  score = 0;
+  goalActive = false;
+  goalType = null;
+  updateHUD();
+
+  alert('🔄 Reset done');
+}
+
+
+
+    document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+    // ---------- Simple world helpers ----------
+    function aabbOverlap(a, aw, ah, az, b, bw, bh, bz) {
+      return Math.abs(a.x - b.x) * 2 < (aw + bw) && Math.abs(a.y - b.y) * 2 < (ah + bh) && Math.abs(a.z - b.z) * 2 < (az + bz);
+    }
+
+    function limitVector(v, max) { if (v.length() > max) v.setLength(max); }
+
+    // ---------- Terrain (3D boxes) ----------
+    function createSampleTerrain() {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+      for (let i=0;i<8;i++) {
+        const w = 2 + Math.random()*6; const d = 2 + Math.random()*6; const h = 0.5 + Math.random()*2;
+        const x = (Math.random()-0.5)*60; const z = (Math.random()-0.5)*60; const y = h/2;
+        const geo = new THREE.BoxGeometry(w,d,h);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, z);
+        scene.add(mesh);
+        terrainBlocks.push({ mesh, w, d, h, hp:5 });
+      }
+    }
+
+
+
+// spawn a burst of small impact particles at a given position
+function spawnImpactParticles(pos, colorHex = 0xffaa33, count = 12) {
+  if (!pos) return;
+  for (let i = 0; i < count; i++) {
+    // material per particle so color/opacity can be set individually
+    const mat = new THREE.MeshStandardMaterial({
+      color: colorHex,
+      emissive: colorHex,
+      emissiveIntensity: 1.2,
+      transparent: true,
+      opacity: 1
+    });
+    const mesh = new THREE.Mesh(impactParticleGeom, mat);
+    // small random offset so particles don't occupy exact same space
+    mesh.position.set(pos.x + (Math.random() - 0.5) * 0.12, pos.y + (Math.random() - 0.5) * 0.12, pos.z + (Math.random() - 0.5) * 0.12);
+    // random velocity outward
+    const vel = new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 4 + 1, (Math.random() - 0.5) * 6);
+    scene.add(mesh);
+    impactParticles.push({ mesh, vel, life: 0.5 + Math.random() * 0.6, age: 0 });
+  }
+}
+
+    // ---------- Shooting ----------
+    function shootBullet() {
+      const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+      const geo = new THREE.SphereGeometry(0.08,6,6); const mat = new THREE.MeshStandardMaterial({ color:0xffdd66 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(camera.position);
+      scene.add(mesh);
+      bullets.push({ mesh, vel: dir.multiplyScalar(40) });
+    }
+
+    // ---------- Enemies ----------
+    function spawnEnemies(count=1) {
+      for (let i=0;i<count;i++) {
+        const geo = new THREE.BoxGeometry(0.8,1.2,0.8); const mat = new THREE.MeshStandardMaterial({ color:0xaa3333 });
+        const mesh = new THREE.Mesh(geo, mat);
+        const x = (Math.random()>0.5?1:-1)*(20 + Math.random()*30);
+        const z = (Math.random()-0.5)*60;
+        mesh.position.set(x, 0.6, z);
+        scene.add(mesh);
+        enemies.push({ mesh, hp: 2, speed: 2, path: null });
+      }
+    }
+
+    // ---------- Items (collectibles) ----------
+    function spawnItems(count=5) {
+      for (let i=0;i<count;i++) {
+        const geo = new THREE.SphereGeometry(0.25,8,8); const mat = new THREE.MeshStandardMaterial({ color:0xffcc00 });
+        const mesh = new THREE.Mesh(geo, mat);
+        const x = (Math.random()-0.5)*60; const z = (Math.random()-0.5)*60; mesh.position.set(x,0.25,z); scene.add(mesh);
+        items.push({ mesh });
+      }
+    }
+
+    // ---------- Boids (flocking) ----------
+    function spawnBoids(count=12) {
+      const geom = new THREE.ConeGeometry(0.2, 0.6, 6);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x66ccff, flatShading: true });
+      for (let i=0;i<count;i++) {
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.rotation.x = Math.PI/2;
+        mesh.position.set((Math.random()-0.5)*20, 1 + Math.random()*2, (Math.random()-0.5)*20);
+        scene.add(mesh);
+        const vel = new THREE.Vector3((Math.random()-0.5)*2, (Math.random()-0.2)*0.5, (Math.random()-0.5)*2);
+        boids.push({ mesh, vel, maxSpeed: 4 + Math.random()*2, maxForce: 3.0 });
+      }
+    }
+
+    function boidUpdate(dt) {
+      const neighborDist = 6;
+      const desiredSeparation = 1.0;
+      for (let i=0;i<boids.length;i++) {
+        const b = boids[i];
+        const pos = b.mesh.position;
+
+        const steerSeparation = new THREE.Vector3();
+        const steerAlign = new THREE.Vector3();
+        const steerCohesion = new THREE.Vector3();
+        let count = 0;
+
+        for (let j=0;j<boids.length;j++) {
+          if (i === j) continue;
+          const other = boids[j];
+          const d = pos.distanceTo(other.mesh.position);
+          if (d < neighborDist) {
+            // separation
+            if (d < desiredSeparation && d > 0) {
+              const diff = new THREE.Vector3().subVectors(pos, other.mesh.position).normalize().divideScalar(d);
+              steerSeparation.add(diff);
+            }
+            // alignment
+            steerAlign.add(other.vel);
+            // cohesion
+            steerCohesion.add(other.mesh.position);
+            count++;
+          }
+        }
+
+        if (count > 0) {
+          // alignment
+          steerAlign.divideScalar(count);
+          steerAlign.setLength(b.maxSpeed);
+          steerAlign.sub(b.vel);
+          limitVector(steerAlign, b.maxForce);
+
+          // cohesion
+          steerCohesion.divideScalar(count);
+          steerCohesion.sub(pos);
+          steerCohesion.setLength(b.maxSpeed);
+          steerCohesion.sub(b.vel);
+          limitVector(steerCohesion, b.maxForce);
+        }
+
+        // separation force
+        steerSeparation.setLength(b.maxSpeed);
+        steerSeparation.sub(b.vel);
+        limitVector(steerSeparation, b.maxForce);
+
+        // avoid player
+        const toPlayer = new THREE.Vector3().subVectors(player.pos, pos);
+        let avoid = new THREE.Vector3();
+        const avoidDist = 3.0;
+        if (toPlayer.length() < avoidDist) {
+          avoid = new THREE.Vector3().subVectors(pos, player.pos).setLength(b.maxSpeed);
+          avoid.sub(b.vel);
+          limitVector(avoid, b.maxForce * 1.5);
+        }
+
+        // combine forces
+        const accel = new THREE.Vector3();
+        accel.add(steerSeparation.multiplyScalar(1.5));
+        accel.add(steerAlign.multiplyScalar(1.0));
+        accel.add(steerCohesion.multiplyScalar(0.8));
+        accel.add(avoid.multiplyScalar(2.0));
+
+        // apply
+        b.vel.add(accel.multiplyScalar(dt));
+        limitVector(b.vel, b.maxSpeed);
+
+        // simple world bounds (wrap)
+        const bounds = 90;
+        if (pos.x > bounds) pos.x = -bounds; if (pos.x < -bounds) pos.x = bounds;
+        if (pos.z > bounds) pos.z = -bounds; if (pos.z < -bounds) pos.z = bounds;
+        if (pos.y < 0.5) pos.y = 0.5; if (pos.y > 6) pos.y = 6;
+
+        // update position
+        pos.addScaledVector(b.vel, dt);
+
+        // orient toward velocity
+        if (b.vel.lengthSq() > 0.001) {
+          const forward = b.vel.clone().normalize();
+          const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), forward.clone().normalize());
+          b.mesh.quaternion.slerp(targetQuat, Math.min(1, dt * 4));
+        }
+      }
+    }
+
+    // ---------- Goals ----------
+    function selectGoal(id) {
+  goalType = id;
+  goalActive = true;
+  goalStart = performance.now();
+
+  // remove existing bullets/enemies/items/boids visually and clear arrays
+  bullets.forEach(b => scene.remove(b.mesh));
+  bullets.length = 0;
+
+  enemies.forEach(e => { if (e.mesh) scene.remove(e.mesh); });
+  enemies.length = 0;
+
+  items.forEach(it => { if (it.mesh) scene.remove(it.mesh); });
+  items.length = 0;
+
+  boids.forEach(b => { if (b.mesh) scene.remove(b.mesh); });
+  boids.length = 0;
+
+  // remove impact particles if any
+  if (typeof impactParticles !== 'undefined') {
+    impactParticles.forEach(p => { if (p.mesh) scene.remove(p.mesh); });
+    impactParticles.length = 0;
+  }
+
+  // remove destination if present (for reachDestination goal)
+  if (typeof destinationMesh !== 'undefined' && destinationMesh) {
+    scene.remove(destinationMesh);
+    destinationMesh = null;
+  }
+
+  score = 0;
+
+  if (id === 'defeatAll') {
+    spawnEnemies(6);
+    goalStatusText = 'Defeat all enemies';
+  } else if (id === 'surviveTime') {
+    goalDuration = 15000;
+    spawnEnemies(4);
+    goalStatusText = 'Survive for 15s';
+  } else if (id === 'collectItems') {
+    spawnItems(6);
+    goalStatusText = 'Collect items';
+  } else if (id === 'reachDestination') {
+    goalStatusText = 'Reach the glowing platform';
+    createDestination();
+  }
+  updateGoalUI();
+}
+
+
+    let destinationMesh = null;
+    function createDestination() {
+      if (destinationMesh) scene.remove(destinationMesh);
+      const geo = new THREE.CylinderGeometry(1.2,1.2,0.2,16); const mat = new THREE.MeshStandardMaterial({ color:0x00ffff, emissive:0x00ffff, emissiveIntensity:0.6 });
+      destinationMesh = new THREE.Mesh(geo, mat); destinationMesh.position.set(20,0.1,20); scene.add(destinationMesh);
+    }
+
+    function updateGoalUI() { goalStatusDiv.textContent = goalStatusText; }
+
+    // ---------- HUD ----------
+    function updateHUD() { hpSpan.textContent = Math.max(0, Math.floor(player.hp)); scoreSpan.textContent = score; }
+
+    // ---------- Input & Pointer Lock ----------
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+    window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+    // pointer lock with right-click
+    renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+    renderer.domElement.addEventListener('mousedown', e => {
+      if (e.button === 2) renderer.domElement.requestPointerLock();
+      if (e.button === 0 && modules.shooting) shootBullet();
+    });
+    document.addEventListener('pointerlockchange', () => {
+      const locked = document.pointerLockElement === renderer.domElement;
+      document.addEventListener('mousemove', onMouseMove);
+    });
+
+    let yaw = 0, pitch = 0;
+    function onMouseMove(e) {
+      if (document.pointerLockElement !== renderer.domElement) return;
+      yaw -= e.movementX * 0.0025; pitch -= e.movementY * 0.0025; pitch = Math.max(-Math.PI/2+0.1, Math.min(Math.PI/2-0.1, pitch));
+    }
+
+    // toggle 3rd person with Shift
+    let shiftDownLast = false; window.addEventListener('keydown', e => { if (e.key === 'Shift') { if(!shiftDownLast){ player.thirdPerson = !player.thirdPerson; crosshair.style.display = player.thirdPerson ? 'none' : 'block'; } shiftDownLast=true; } });
+    window.addEventListener('keyup', e => { if (e.key === 'Shift') shiftDownLast=false; });
+
+    // ---------- Main loop ----------
+    const clock = new THREE.Clock();
+    function loop() {
+      const dt = Math.min(clock.getDelta(), 0.05);
+
+      // movement
+      if (modules.movement && !player.thirdPerson) {
+        const dir = new THREE.Vector3();
+        if (keys.w) dir.z -= 1; if (keys.s) dir.z += 1; if (keys.a) dir.x -= 1; if (keys.d) dir.x += 1;
+        if (dir.lengthSq()>0) dir.normalize();
+        const euler = new THREE.Euler(0, yaw, 0);
+        dir.applyEuler(euler);
+        player.pos.x += dir.x * player.speed * dt;
+        player.pos.z += dir.z * player.speed * dt;
+      }
+
+      // simple gravity & ground
+      player.vel.y -= 9.8 * dt; player.pos.y += player.vel.y * dt; if (player.pos.y < 1.0) { player.pos.y = 1.0; player.vel.y = 0; player.onGround = true; }
+      if (keys[' '] && player.onGround && player.canJump) { player.vel.y = player.jumpPower; player.onGround = false; }
+
+
+
+      // collision with terrain blocks (basic)
+      if (modules.collision && terrainBlocks.length) {
+        for (const t of terrainBlocks) {
+          const a = { x: player.pos.x, y: player.pos.y, z: player.pos.z };
+          const b = { x: t.mesh.position.x, y: t.mesh.position.y, z: t.mesh.position.z };
+          // simple XZ overlap check
+          if (Math.abs(a.x - b.x) < (t.w/1 + 0.6) && Math.abs(a.z - b.z) < (t.d/1 + 0.6) && player.pos.y < t.mesh.position.y + t.h + 0.8) {
+            // push back
+            const to = new THREE.Vector3().subVectors(a, b); to.y = 0; to.normalize(); player.pos.add(to.multiplyScalar(0.05));
+          }
+        }
+      }
+
+      // update camera
+      if (player.thirdPerson) {
+        const distance = 5.0;
+        const spherical = new THREE.Spherical(distance, Math.PI/2 + pitch, yaw);
+        const offset = new THREE.Vector3().setFromSpherical(spherical);
+        const target = new THREE.Vector3(player.pos.x, player.pos.y + 1.0, player.pos.z);
+        camera.position.copy(target).add(offset);
+        camera.lookAt(target);
+        playerMesh.visible = true; playerMesh.position.copy(player.pos).y += 0.8;
+      } else {
+        // first person
+        camera.position.copy(player.pos); camera.position.y += 1.4; camera.rotation.set(pitch, yaw, 0, 'YXZ'); playerMesh.visible = false;
+      }
+
+      // bullets
+      for (let i = bullets.length-1; i>=0; i--) {
+        const b = bullets[i]; b.mesh.position.addScaledVector(b.vel, dt);
+        // collide with enemies
+for (let j = enemies.length-1; j>=0; j--) {
+  const e = enemies[j];
+  if (aabbOverlap(b.mesh.position,0.2,0.2,0.2, e.mesh.position,0.6,1.2,0.6)) {
+    // spawn impact burst at the bullet position (bright red-orange)
+    if (modules._shootingParticles !== false) spawnImpactParticles(b.mesh.position.clone(), 0xff6644, 14);
+
+
+    e.hp--;
+    scene.remove(b.mesh);
+    bullets.splice(i,1);
+    if (e.hp <= 0) {
+      scene.remove(e.mesh);
+      enemies.splice(j,1);
+      score += 10;
+    }
+    break;
+  }
+}
+
+        // collide with terrain
+for (let t = terrainBlocks.length-1; t>=0; t--) {
+  const tb = terrainBlocks[t];
+  if (aabbOverlap(b.mesh.position,0.2,0.2,0.2, tb.mesh.position, tb.w, tb.h, tb.d)) {
+    // spawn stony spark burst
+    if (modules._shootingParticles !== false) spawnImpactParticles(b.mesh.position.clone(), 0xcccccc, 10);
+
+
+    tb.hp--;
+    scene.remove(b.mesh);
+    bullets.splice(i,1);
+    if (tb.hp <= 0) {
+      scene.remove(tb.mesh);
+      terrainBlocks.splice(t,1);
+    }
+    break;
+  }
+}
+
+        // collide with boids
+for (let k = boids.length-1; k>=0; k--) {
+  const bo = boids[k];
+  if (aabbOverlap(b.mesh.position,0.2,0.2,0.2, bo.mesh.position,0.3,0.6,0.3)) {
+    // airy/blue burst for boid hits
+    if (modules._shootingParticles !== false) spawnImpactParticles(b.mesh.position.clone(), 0x66ccff, 8);
+
+
+    scene.remove(b.mesh);
+    bullets.splice(i,1);
+    scene.remove(bo.mesh);
+    boids.splice(k,1);
+    score += 2;
+    break;
+  }
+}
+
+        if (b.mesh.position.length() > 100) { scene.remove(b.mesh); bullets.splice(i,1); }
+      }
+
+
+// update impact particles (move, fade, and remove when expired)
+for (let p = impactParticles.length - 1; p >= 0; p--) {
+  const ip = impactParticles[p];
+  // integrate
+  ip.mesh.position.addScaledVector(ip.vel, dt);
+  // gravity-ish on particles (gentler)
+  ip.vel.y -= 9.8 * dt * 0.4;
+  // age + scale/opacity easing
+  ip.age += dt;
+  const tLeft = Math.max(0, 1 - (ip.age / ip.life));
+  // scale down and fade
+  ip.mesh.scale.setScalar(Math.max(0.02, tLeft));
+  if (ip.mesh.material) ip.mesh.material.opacity = Math.max(0, tLeft);
+  // remove if expired
+  if (ip.age >= ip.life) {
+    scene.remove(ip.mesh);
+    impactParticles.splice(p, 1);
+  }
+}
+
+      // enemies simple AI
+      if (modules.enemyAI) {
+        for (const e of enemies) {
+          const toPlayer = new THREE.Vector3().subVectors(player.pos, e.mesh.position); toPlayer.y = 0; const dist = toPlayer.length();
+          if (dist > 0.5) { toPlayer.normalize(); e.mesh.position.addScaledVector(toPlayer, e.speed * dt); }
+          // collision with player
+          if (aabbOverlap(e.mesh.position,0.6,1.2,0.6, player.pos,0.6,1.6,0.6)) { player.hp -= 10 * dt; }
+        }
+      }
+
+      // boids update
+      if (modules.boids && boids.length) boidUpdate(dt);
+
+      // items collision
+      if (modules.goal && goalActive && goalType === 'collectItems') {
+        for (let i = items.length-1; i>=0; i--) {
+          const it = items[i]; if (aabbOverlap(it.mesh.position,0.3,0.3,0.3, player.pos,0.6,1.6,0.6)) { scene.remove(it.mesh); items.splice(i,1); score += 5; }
+        }
+      }
+
+      // goal: reach destination
+      if (goalActive && goalType === 'reachDestination' && destinationMesh) {
+        if (aabbOverlap(destinationMesh.position,1.2,0.2,1.2, player.pos,0.6,1.6,0.6)) { goalStatusText = '🎉 Reached destination!'; goalActive = false; }
+      }
+
+      // goal: surviveTime
+      if (goalActive && goalType === 'surviveTime') {
+        const elapsed = performance.now() - goalStart; if (elapsed >= goalDuration) { goalStatusText = '⏱️ You survived!'; goalActive = false; }
+        else goalStatusText = 'Survive: ' + Math.ceil((goalDuration - elapsed)/1000) + 's';
+      }
+
+      // update HUD
+      updateHUD(); updateGoalUI();
+
+// --- Day/Night cycle animation (runs when dayNightActive === true) ---
+if (dayNightActive) {
+  if (sunMesh) sunMesh.visible = true;
+  if (moonMesh) moonMesh.visible = true;
+  if (sunLight) sunLight.visible = true;
+  if (moonLight) moonLight.visible = true;
+
+  cycleTime = (cycleTime + dt) % cycleDuration;
+  const progress = cycleTime / cycleDuration; // 0..1
+  const angle = progress * Math.PI * 2;
+  const radius = 200;
+
+  // Position sun & moon opposite each other in sky
+  sunMesh.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+  moonMesh.position.set(Math.cos(angle + Math.PI) * radius, Math.sin(angle + Math.PI) * radius, 0);
+
+  // Update lights direction (use position normalized)
+  sunLight.position.copy(sunMesh.position).normalize();
+  moonLight.position.copy(moonMesh.position).normalize();
+
+  // Determine if it's day or night by sun's Y value
+  const sunUp = Math.sin(angle) > 0;
+
+  if (sunUp) {
+    // Day time
+    skyMat.color.set(0x87ceeb);       // light blue
+skyMat.color.multiply(themeTint); // apply theme tint
+scene.background.set(skyMat.color.getHex());
+
+    sunLight.intensity = 1.0;
+    moonLight.intensity = 0.0;
+    stars.visible = false;
+    // gentle ambient during day
+  } else {
+    // Night time
+    skyMat.color.set(0x000018);       // deep night blue
+skyMat.color.multiply(themeTint); // apply theme tint
+scene.background.set(skyMat.color.getHex());
+
+    sunLight.intensity = 0.0;
+    moonLight.intensity = 0.5;
+    stars.visible = true;
+  }
+
+  // moon emissive glow (make it slightly brighter at night)
+  if (moonMesh.material && !sunUp) moonMesh.material.color.set(0xccccff); 
+  // --- animate twinkle stars + milky way opacity ---
+  // use a time value so each twinkle has its own phase
+  const now = performance.now() * 0.001;
+  if (twinkleStars && twinkleStars.length) {
+    for (let ts of twinkleStars) {
+      // twinkle only at night
+      if (!sunUp) {
+        const v = 0.5 + 0.5 * Math.sin(now * ts.speed + ts.phase);
+        // map v (0..1) into an opacity multiplier (0.4..1.0)
+        const mult = 0.4 + 0.6 * v;
+        ts.mesh.material.opacity = Math.min(1, ts.baseOpacity * mult);
+        ts.mesh.visible = true;
+      } else {
+        ts.mesh.visible = false;
+      }
+    }
+  }
+
+  // milky way fades in at night and fades out at day
+  if (milkyWayMesh && milkyWayMesh.material) {
+    // make milkyway strongest near midnight (sun opposite)
+    const nightFactor = sunUp ? 0 : 1; // simple on/off; we'll blend with angle for subtlety
+    // stronger when sun is well below horizon: use sin(angle) which we used earlier
+    const angleFactor = (Math.sin(angle) < -0.2) ? (-(Math.sin(angle) + 0.2) / 0.8) : 0;
+    // final opacity map: 0..0.95
+    milkyWayMesh.material.opacity = Math.min(0.95, 0.25 * nightFactor + 0.7 * angleFactor);
+    milkyWayMesh.visible = milkyWayMesh.material.opacity > 0.01;
+  }
+
+}
+
+// weather update (runs every frame)
+updateWeather(dt);
+
+// if cycle is not active, ensure sun/moon and their lights are hidden
+if (!dayNightActive) {
+  if (sunMesh) sunMesh.visible = false;
+  if (moonMesh) moonMesh.visible = false;
+  if (sunLight) { sunLight.visible = false; sunLight.intensity = 0.0; }
+  if (moonLight) { moonLight.visible = false; moonLight.intensity = 0.0; }
+  if (typeof stars !== 'undefined' && stars) stars.visible = false;
+}
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(loop);
+    }
+
+    // ---------- Start ----------
+    camera.position.set(0,1.4,5); camera.lookAt(0,1,0);
+    renderer.setSize(window.innerWidth - 280, window.innerHeight);
+    window.addEventListener('resize', () => { renderer.setSize(window.innerWidth - 280, window.innerHeight); camera.aspect = (window.innerWidth-280)/window.innerHeight; camera.updateProjectionMatrix(); });
+
+    // ---------- Utilities exposed to UI ----------
+    function spawnItemsUI(count=5) { spawnItems(count); }
+    function spawnEnemiesUI(count=1) { spawnEnemies(count); }
+
+    
+
+    window.spawnEnemiesUI = spawnEnemiesUI; window.spawnItemsUI = spawnItemsUI; window.selectGoal = selectGoal; window.spawnBoids = spawnBoids;
+initSectionToggles();
+updateActiveCounts();
+// begin loop
+loop();
+  </script>
+</body>
+</html>
