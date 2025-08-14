@@ -1,4 +1,4 @@
- <!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -75,6 +75,8 @@
 <div class="module" draggable="true" data-module="boids">🐦 Boids (Flocking)</div>
 <div class="module" draggable="true" data-module="weather">⛅ Weather (Rain / Snow / Fog / Lightning)</div>
 <div class="module" draggable="true" data-module="dayNight">🌗 Day/Night Cycle</div>
+<div class="module" draggable="true" data-module="planets">🪐 Planets (Mars)</div>
+
 
 
 
@@ -82,13 +84,15 @@
 <div id="active-modules-section" style="margin-top:12px;">
   <h4>Active — Modules</h4>
   <!-- Active modules sections (per category) -->
-<div id="active-modules-section" class="active-section" style="margin-top:12px;">
+<!-- after: unique id used for the toggle -->
+<div id="active-modules-section-inner" class="active-section" style="margin-top:12px;">
   <h4>
-    <button class="section-toggle" data-target="active-modules-section" aria-expanded="true">▾</button>
+    <button class="section-toggle" data-target="active-modules-section-inner" aria-expanded="true">▾</button>
     Active — Modules <span id="active-modules-count">0</span>
   </h4>
   <div id="active-modules-list" class="active-list"></div>
 </div>
+
 
 <div id="active-graphicfx-section" class="active-section" style="margin-top:8px;">
   <h4>
@@ -264,13 +268,17 @@ scene.add(stars);
   if (moonMesh && moonMesh.material && !sunUp) moonMesh.material.color.set(0xccccff);
 })();
 
-// --- Twinkle stars + Milky Way band setup ---
 (function createTwinklesAndMilkyWay(){
   // Twinkle stars (individual small meshes so each can twinkle separately)
   for (let i = 0; i < 120; i++) {
     const g = new THREE.SphereGeometry(0.06, 6, 6);
     const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false });
     const mesh = new THREE.Mesh(g, m);
+
+    // mark twinkles so reset can remove them if needed
+    mesh.userData = mesh.userData || {};
+    mesh.userData._weather = 'twinkle';
+
     // place on sky sphere
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1); // distribute over sphere
@@ -295,11 +303,9 @@ scene.add(stars);
   cvs.width = cw; cvs.height = ch;
   const ctx = cvs.getContext('2d');
 
-  // clear
+  // draw band + speckles
   ctx.fillStyle = 'rgba(0,0,0,0)';
   ctx.fillRect(0,0,cw,ch);
-
-  // horizontal soft band gradient (center brighter)
   const g = ctx.createLinearGradient(0,0,cw,0);
   g.addColorStop(0.0, 'rgba(255,255,255,0.00)');
   g.addColorStop(0.38, 'rgba(255,255,255,0.04)');
@@ -309,10 +315,8 @@ scene.add(stars);
   ctx.fillStyle = g;
   ctx.fillRect(0, ch * 0.15, cw, ch * 0.7);
 
-  // add speckle noise for stars inside band
   for (let i = 0; i < 3500; i++) {
     const x = Math.random() * cw;
-    // bias Y toward center band
     const y = (ch/2) + (Math.random() - 0.5) * (ch * 0.25) * (Math.random() + 0.5);
     const a = Math.random() * 0.9;
     ctx.fillStyle = `rgba(255,255,255,${a})`;
@@ -321,15 +325,133 @@ scene.add(stars);
 
   const mwTex = new THREE.CanvasTexture(cvs);
   mwTex.needsUpdate = true;
-  const mwMat = new THREE.MeshBasicMaterial({ map: mwTex, transparent: true, opacity: 0.0, depthWrite: false });
+
+  // IMPORTANT: set DoubleSide + transparent + depthWrite=false so MW sits on top of sky dome
+  const mwMat = new THREE.MeshBasicMaterial({
+    map: mwTex,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+
   milkyWayMesh = new THREE.Mesh(new THREE.PlaneGeometry(900, 140), mwMat);
 
-  // place it far up in the sky and tilt slightly; it will look like a band across the sky
+  // place it up in the sky and tilt slightly; it will look like a band across the sky
   milkyWayMesh.position.set(0, 120, -300);
   milkyWayMesh.rotation.set(Math.PI * 0.12, 0, 0);
   milkyWayMesh.renderOrder = 1000;
+  // do NOT tag milky way as weather (so reset won't delete it)
+  milkyWayMesh.userData = milkyWayMesh.userData || {};
   scene.add(milkyWayMesh);
-})();// Weather helpers: rain / snow / fog / lightning (simple implementations)
+})();
+// ---------- Planets (Mars) ----------
+const planets = [];
+
+// simple procedural Mars canvas texture (red/orange, some darker blotches)
+function makeMarsTexture(size = 512) {
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = size;
+  const ctx = cvs.getContext('2d');
+
+  // base
+  ctx.fillStyle = '#8b3b2f'; // mars base
+  ctx.fillRect(0, 0, size, size);
+
+  // subtle bands
+  for (let i = 0; i < 28; i++) {
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(${200 + Math.floor(Math.random()*40)},${90 + Math.floor(Math.random()*60)},${70 + Math.floor(Math.random()*50)},${0.02 + Math.random()*0.06})`;
+    const y = size * (i / 28) + Math.sin(i * 1.2 + Math.random()*4) * 4;
+    ctx.fillRect(0, y, size, Math.max(2, 6 + Math.random()*8));
+  }
+
+  // blotches (craters / albedo)
+  for (let i = 0; i < 1600; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = Math.random() * 8;
+    const a = 0.04 + Math.random() * 0.25;
+    ctx.fillStyle = `rgba(${120 + Math.random()*80}, ${40 + Math.random()*40}, ${30 + Math.random()*40}, ${a})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * (0.6 + Math.random()*0.8), Math.random()*Math.PI, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // small bright highlights
+  for (let i = 0; i < 30; i++) {
+    ctx.fillStyle = `rgba(255,220,180,${0.03 + Math.random()*0.12})`;
+    ctx.fillRect(Math.random()*size, Math.random()*size, 1 + Math.random()*3, 1 + Math.random()*3);
+  }
+
+  return new THREE.CanvasTexture(cvs);
+}
+
+function createMars() {
+  if (planets.find(p => p.name === 'mars')) return;
+
+  const tex = makeMarsTexture(1024);
+  tex.needsUpdate = true;
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    depthWrite: false
+  });
+
+  const radius = 8;
+  const geom = new THREE.SphereGeometry(radius, 32, 16);
+  const mesh = new THREE.Mesh(geom, mat);
+
+  // place it in the distant sky (tweak these values to taste)
+  const basePos = { x: 140, y: 60, z: -220 };
+  mesh.position.set(basePos.x, basePos.y, basePos.z);
+
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 900;
+  mesh.userData = mesh.userData || {};
+  mesh.userData.basePos = basePos;
+  mesh.userData.orbitSpeed = 0.02 + Math.random()*0.02;
+  mesh.userData.spin = 0.2 + Math.random()*0.5;
+
+  scene.add(mesh);
+  planets.push({ name: 'mars', mesh, mat, tex });
+}
+
+function clearPlanets() {
+  for (const p of planets) {
+    if (p.mesh) scene.remove(p.mesh);
+  }
+  planets.length = 0;
+}
+
+function updatePlanets(dt, dayNightAngle) {
+  let nightFactor = 0;
+  if (typeof dayNightAngle === 'number') {
+    const sunY = Math.sin(dayNightAngle);
+    nightFactor = Math.max(0, Math.min(1, (-sunY + 1) / 2));
+  } else {
+    nightFactor = 0.15; // faint visibility when cycle is off
+  }
+
+  for (const p of planets) {
+    const m = p.mesh;
+    m.rotation.y += (p.mesh.userData.spin || 0.25) * dt;
+    const angle = performance.now() * 0.0001 * (p.mesh.userData.orbitSpeed || 0.02);
+    const basePos = p.mesh.userData.basePos || { x:140, y:60, z:-220 };
+    m.position.x = basePos.x + Math.cos(angle) * 12;
+    m.position.z = basePos.z + Math.sin(angle) * 8;
+    m.position.y = basePos.y + Math.sin(angle*0.6) * 6;
+
+    const minDay = 0.12;
+    const maxNight = 0.94;
+    const opacity = Math.max(minDay, Math.min(maxNight, minDay + (maxNight - minDay) * nightFactor));
+    if (p.mat) p.mat.opacity = opacity;
+    p.mesh.visible = (p.mat.opacity > 0.02);
+    if (p.mat) p.mat.needsUpdate = true;
+  }
+}
+
+// Weather helpers: rain / snow / fog / lightning (simple implementations)
 function spawnRain(count = 300) {
   const mat = new THREE.LineBasicMaterial({ color: 0x88aaff, transparent: true, opacity: 0.7 });
   for (let i = 0; i < count; i++) {
@@ -340,11 +462,15 @@ function spawnRain(count = 300) {
     const positions = new Float32Array([x, y, z, x, y - 1.2 - Math.random()*2, z]);
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const line = new THREE.Line(geo, mat);
-    line.userData = { velY: 20 + Math.random() * 40 };
+    line.userData = line.userData || {};
+    line.userData.velY = 20 + Math.random() * 40;
+    // mark as weather so reset can clean it
+    line.userData._weather = 'rain';
     scene.add(line);
     weatherState.rainParticles.push(line);
   }
 }
+
 
 function spawnSnow(count = 150) {
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
@@ -352,11 +478,16 @@ function spawnSnow(count = 150) {
   for (let i = 0; i < count; i++) {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set((Math.random()-0.5)*200, 30 + Math.random()*50, (Math.random()-0.5)*200);
-    mesh.userData = { velY: -2 - Math.random()*2, sway: Math.random()*0.5 };
+    mesh.userData = mesh.userData || {};
+    mesh.userData.velY = -2 - Math.random()*2;
+    mesh.userData.sway = Math.random()*0.5;
+    // mark as weather so reset can remove it
+    mesh.userData._weather = 'snow';
     scene.add(mesh);
     weatherState.snowParticles.push(mesh);
   }
 }
+
 
 function enableFog(on) {
   if (on) scene.fog = new THREE.FogExp2(0x0b0b14, 0.0025);
@@ -368,6 +499,8 @@ function triggerLightning() {
   weatherState.lightningCooldown = 3 + Math.random()*6;
   if (!lightningLight) {
     lightningLight = new THREE.PointLight(0xffffff, 0, 1200);
+    lightningLight.userData = lightningLight.userData || {};
+    lightningLight.userData._weather = 'lightning';
     scene.add(lightningLight);
   }
   lightningLight.intensity = 8.0;
@@ -375,6 +508,7 @@ function triggerLightning() {
   // brief stun to player
   player.stunned = 1.2;
 }
+
 
 function updateWeather(dt) {
   // rain update
@@ -495,10 +629,12 @@ const moduleCategoryMap = {
   terrain: 'modules',
   spawnEnemies: 'modules',
   spawnItems: 'modules',
-    boids: 'graphicfx',
+  boids: 'graphicfx',
   dayNight: 'graphicfx',
-  weather: 'graphicfx'
+  weather: 'graphicfx',
+  planets: 'graphicfx'
 };
+
 
 
 
@@ -925,6 +1061,8 @@ updateActiveCounts();
   if (mod === 'enemyAI') spawnEnemies(4);
   if (mod === 'health') player.hp = 100;
   if (mod === 'boids') spawnBoids(12);
+  if (mod === 'planets') createMars();
+
   if (mod === 'movement') player.canJump = true; // ensure movement enables jumping by default
   updateHUD();
   alert('✅ ' + mod + ' enabled');
@@ -950,6 +1088,8 @@ updateActiveCounts();
     boids.length = 0;
   }
 
+  if (mod === 'planets') clearPlanets();
+
   // if disabling day/night, stop the cycle and hide its visuals
   if (mod === 'dayNight') {
     dayNightActive = false;
@@ -970,10 +1110,10 @@ updateActiveCounts();
 
     
       function resetAll() {
-  // clear modules mapping and UI (don't remove day/night objects — only hide/reset them)
+  // clear modules mapping and UI
   Object.keys(modules).forEach(k => delete modules[k]);
 
-  // remove and clear bullets/enemies/items/terrain/boids
+  // remove common collections
   bullets.forEach(b => { if (b.mesh) scene.remove(b.mesh); });
   bullets.length = 0;
 
@@ -989,53 +1129,73 @@ updateActiveCounts();
   boids.forEach(b => { if (b.mesh) scene.remove(b.mesh); });
   boids.length = 0;
 
-  // remove impact particles
   if (typeof impactParticles !== 'undefined') {
     impactParticles.forEach(p => { if (p.mesh) scene.remove(p.mesh); });
     impactParticles.length = 0;
   }
 
-  // remove any twinkle star meshes created earlier, but keep arrays so the system can recreate them later
+  // Clear weather arrays tracked by state
+  if (weatherState.rainParticles && weatherState.rainParticles.length) {
+    weatherState.rainParticles.forEach(p => scene.remove(p));
+    weatherState.rainParticles.length = 0;
+  }
+  if (weatherState.snowParticles && weatherState.snowParticles.length) {
+    weatherState.snowParticles.forEach(p => scene.remove(p));
+    weatherState.snowParticles.length = 0;
+  }
+
+  // turn off fog
+  enableFog(false);
+
+  // reset weather flags
+  weatherState.rain = weatherState.snow = weatherState.fog = weatherState.lightning = false;
+  weatherState.lightningCooldown = 0;
+
+  // remove any scene child that was marked as weather
+  const children = Array.from(scene.children);
+  for (const child of children) {
+    if (child && child.userData && child.userData._weather) {
+      scene.remove(child);
+    }
+  }
+
+  // ensure lightning light is removed
+  if (lightningLight) {
+    scene.remove(lightningLight);
+    lightningLight = null;
+  }
+
+  // clear twinkle stars array & remove their meshes if still present
   if (typeof twinkleStars !== 'undefined' && twinkleStars.length) {
     twinkleStars.forEach(ts => { if (ts.mesh) scene.remove(ts.mesh); });
-    // keep twinkleStars array (clear contents so create code can rebuild later if needed)
     twinkleStars.length = 0;
   }
 
-  // do not destroy milkyWayMesh object — just hide it and reset opacity
-  if (typeof milkyWayMesh !== 'undefined' && milkyWayMesh) {
-    if (milkyWayMesh.material) milkyWayMesh.material.opacity = 0;
-    milkyWayMesh.visible = false;
+  // keep the milky way object, but make it transparent at reset (so day/night logic can bring it back)
+if (typeof milkyWayMesh !== 'undefined' && milkyWayMesh) {
+  if (milkyWayMesh.material) {
+    milkyWayMesh.material.opacity = 0;
+    milkyWayMesh.material.transparent = true;
+    milkyWayMesh.material.depthWrite = false;
+    milkyWayMesh.material.side = THREE.DoubleSide;
+    milkyWayMesh.material.needsUpdate = true;
   }
+  // keep visible so renderOrder + material settings can display it when opacity > 0
+  milkyWayMesh.visible = true;
+}
 
-  // STOP day-night but keep objects so logic is stable
+
+  clearPlanets();
+
+
+  // STOP day-night
   dayNightActive = false;
   cycleTime = 0;
-
-  if (typeof sunMesh !== 'undefined' && sunMesh) {
-    sunMesh.visible = false;
-    // reset to starting position (optional)
-    const angle = (cycleTime / cycleDuration) * Math.PI * 2;
-    const radius = 200;
-    sunMesh.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
-  }
-  if (typeof moonMesh !== 'undefined' && moonMesh) {
-    moonMesh.visible = false;
-    const angle = (cycleTime / cycleDuration) * Math.PI * 2;
-    const radius = 200;
-    moonMesh.position.set(Math.cos(angle + Math.PI) * radius, Math.sin(angle + Math.PI) * radius, 0);
-  }
-  if (typeof sunLight !== 'undefined' && sunLight) {
-    sunLight.visible = false;
-    sunLight.intensity = 0;
-  }
-  if (typeof moonLight !== 'undefined' && moonLight) {
-    moonLight.visible = false;
-    moonLight.intensity = 0;
-  }
-  if (typeof stars !== 'undefined' && stars) {
-    stars.visible = false;
-  }
+  if (sunMesh) sunMesh.visible = false;
+  if (moonMesh) moonMesh.visible = false;
+  if (sunLight) { sunLight.visible = false; sunLight.intensity = 0; }
+  if (moonLight) { moonLight.visible = false; moonLight.intensity = 0; }
+  if (typeof stars !== 'undefined' && stars) stars.visible = false;
 
   // remove destination if any
   if (typeof destinationMesh !== 'undefined' && destinationMesh) {
@@ -1053,9 +1213,21 @@ updateActiveCounts();
   goalActive = false;
   goalType = null;
   updateHUD();
+  updateGoalUI();
+
+  // reset sky/background to theme baseline
+  const baseHex = (currentTheme === 'cyberpunk') ? 0x0b0b1a : (currentTheme === 'fantasy' ? 0x2b1b1b : 0x111111);
+  if (typeof skyMat !== 'undefined' && skyMat) {
+    skyMat.color.set(baseHex);
+    skyMat.color.multiply(themeTint);
+    scene.background.set(skyMat.color.getHex());
+  } else {
+    scene.background.set(baseHex);
+  }
 
   alert('🔄 Reset done');
 }
+
 
 
 
@@ -1568,9 +1740,11 @@ scene.background.set(skyMat.color.getHex());
     // stronger when sun is well below horizon: use sin(angle) which we used earlier
     const angleFactor = (Math.sin(angle) < -0.2) ? (-(Math.sin(angle) + 0.2) / 0.8) : 0;
     // final opacity map: 0..0.95
-    milkyWayMesh.material.opacity = Math.min(0.95, 0.25 * nightFactor + 0.7 * angleFactor);
+    milkyWayMesh.material.opacity = Math.min(0.95, 0.25 * nightFactor + 0.7 * angleFactor + 0.25 * Math.max(0, (0.4 - Math.abs(Math.sin(angle))) / 0.4));
+
     milkyWayMesh.visible = milkyWayMesh.material.opacity > 0.01;
   }
+    updatePlanets(dt, angle);
 
 }
 
@@ -1584,7 +1758,8 @@ if (!dayNightActive) {
   if (sunLight) { sunLight.visible = false; sunLight.intensity = 0.0; }
   if (moonLight) { moonLight.visible = false; moonLight.intensity = 0.0; }
   if (typeof stars !== 'undefined' && stars) stars.visible = false;
-}
+}if (!dayNightActive) updatePlanets(dt);
+
 
       renderer.render(scene, camera);
       requestAnimationFrame(loop);
@@ -1609,3 +1784,5 @@ loop();
   </script>
 </body>
 </html>
+
+
